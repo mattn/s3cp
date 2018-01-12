@@ -2,6 +2,7 @@ package file
 
 import (
 	"os"
+	"runtime"
 	"testing"
 )
 
@@ -24,6 +25,9 @@ func walk(path string, info os.FileInfo, err error) error {
 }
 
 func TestListFiles(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skip test on Windows")
+	}
 	errs := ListFiles("test_dir", walk, 0)
 	if len(errs) != 0 {
 		t.Error(errs)
