@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -27,6 +28,7 @@ var (
 	checkSize                = true
 	checkMD5                 = false
 	workNum                  = 1
+	endpoint                 = ""
 	region                   = "ap-northeast-1"
 	bucket                   = ""
 	cpPath                   = ""
@@ -77,6 +79,7 @@ func main() {
 	flag.IntVar(&RetryMaxElapsedTime, "RetryMaxElapsedTime", RetryMaxElapsedTime, "Retry Max Elapsed Time")
 
 	flag.IntVar(&logLevel, "d", logLevel, "log level")
+	flag.StringVar(&endpoint, "e", "", "endpoint")
 
 	flag.Parse()
 
@@ -98,8 +101,13 @@ func main() {
 	destPath = flag.Args()[2]
 
 	httpClient := &http.Client{
-		Timeout:   time.Duration(5) * time.Second,
-		Transport: &DebugTransport{http.Transport{MaxIdleConnsPerHost: 32}},
+		Timeout: time.Duration(5) * time.Second,
+		Transport: &DebugTransport{
+			http.Transport{
+				Proxy:               http.ProxyFromEnvironment,
+				MaxIdleConnsPerHost: 32,
+			},
+		},
 	}
 	lt := aws.LogLevelType(logLevel)
 	sess, err := session.NewSession()
@@ -111,6 +119,10 @@ func main() {
 		Region:     &region,
 		HTTPClient: httpClient,
 		LogLevel:   &lt,
+	}
+	if endpoint != "" {
+		conf.Endpoint = &endpoint
+		conf.S3ForcePathStyle = aws.Bool(true)
 	}
 
 	//S3client = s3.New(aws.DetectCreds("", "", ""), region, client)
@@ -221,7 +233,7 @@ func (g *GenUploadTask) MakeTask(done <-chan struct{}, tasks chan<- pipelines.Ta
 				return err
 			}
 			select {
-			case tasks <- s3cpTask{path: path, root: g.cpPath, dest: g.destPath}:
+			case tasks <- s3cpTask{path: filepath.ToSlash(path), root: g.cpPath, dest: g.destPath}:
 			case <-done:
 				return errors.New("Generate Task canceled")
 			}
